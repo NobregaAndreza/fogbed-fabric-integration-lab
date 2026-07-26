@@ -19,3 +19,21 @@ LAB 08 → Canal
 LAB 09 → Chaincode
 
 LAB 10 → Arquitetura completa
+
+
+## Arquitetura proposta
+
+
+Hyperledger Fabric
+
+↓
+
+Fogbed
+
+↓
+
+Containernet
+
+↓
+
+Docker

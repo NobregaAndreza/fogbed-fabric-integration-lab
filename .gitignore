@@ -1,0 +1,141 @@
+# ==========================================
+# Third-party dependencies
+# ==========================================
+
+# External projects downloaded by setup scripts
+# TODO: Review this decision later. Remove if any external dependency needs to be versioned.
+# Keep only installation/setup scripts in the repository whenever possible.
+third_party/
+
+# Explicit external installers/scripts downloaded temporarily
+install-fabric.sh
+install-fogbed.sh
+install-fogbed*.sh
+
+
+# ==========================================
+# Hyperledger Fabric
+# ==========================================
+
+# Fabric binaries
+bin/
+fabric-samples/bin/
+
+# Fabric generated configurations
+fabric-samples/config/
+
+# Test-network generated artifacts
+fabric-samples/test-network/organizations/
+fabric-samples/test-network/system-genesis-block/
+fabric-samples/test-network/channel-artifacts/
+
+# Fabric CA generated material
+fabric-ca/
+
+# Crypto material
+**/crypto-config/
+**/organizations/
+**/msp/
+**/keystore/
+**/signcerts/
+**/tlscacerts/
+
+# Genesis blocks
+*.block
+
+# Channel artifacts
+*.tx
+
+
+# ==========================================
+# Docker
+# ==========================================
+
+# Docker volumes
+volumes/
+docker-volumes/
+data/
+
+# Docker compose generated files
+docker-compose.override.yml
+
+# Container logs
+*.log
+
+
+# ==========================================
+# Fogbed / Containernet
+# ==========================================
+
+# Runtime files
+*.pid
+
+# Experiment outputs
+results/
+output/
+logs/
+
+# Temporary topology files
+*.tmp
+
+
+# ==========================================
+# Python
+# ==========================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python package metadata
+*.egg-info/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+
+# ==========================================
+# Development tools
+# ==========================================
+
+.vscode/
+.idea/
+
+# Linux
+*~
+.Trash-*
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+
+# ==========================================
+# Build artifacts
+# ==========================================
+
+build/
+dist/
+target/
+
+# Compiled binaries
+*.o
+*.so
+
+
+# ==========================================
+# Large experiment files
+# ==========================================
+
+*.zip
+*.tar.gz
+*.tar
+*.iso
