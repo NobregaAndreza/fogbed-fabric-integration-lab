@@ -1,0 +1,145 @@
+Organizations:
+  - &OrdererOrg
+    Name: OrdererMSP
+
+    ID: OrdererMSP
+
+    MSPDir: crypto-material/ordererOrganizations/example.com/msp
+
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+
+      Writers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+
+      Admins:
+        Type: Signature
+        Rule: "OR('OrdererMSP.admin')"
+
+  - &Org1
+    Name: Org1MSP
+
+    ID: Org1MSP
+
+    MSPDir: crypto-material/peerOrganizations/org1.example.com/msp
+
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('Org1MSP.member')"
+
+      Writers:
+        Type: Signature
+        Rule: "OR('Org1MSP.member')"
+
+      Admins:
+        Type: Signature
+        Rule: "OR('Org1MSP.admin')"
+
+Capabilities:
+  Channel: &ChannelCapabilities
+    V2_0: true
+
+  Orderer: &OrdererCapabilities
+    V2_0: true
+
+  Application: &ApplicationCapabilities
+    V2_5: true
+
+Application: &ApplicationDefaults
+  Organizations:
+
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+
+  Capabilities:
+    <<: *ApplicationCapabilities
+
+Orderer: &OrdererDefaults
+  OrdererType: etcdraft
+
+  Addresses:
+    - orderer0.example.com:7050
+
+  BatchTimeout: 2s
+
+  BatchSize:
+    MaxMessageCount: 10
+    AbsoluteMaxBytes: 99 MB
+    PreferredMaxBytes: 512 KB
+
+  EtcdRaft:
+    Consenters:
+      - Host: orderer0.example.com
+        Port: 7050
+
+        ClientTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+
+        ServerTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+
+  Organizations:
+
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+
+    BlockValidation:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+
+  Capabilities:
+    <<: *OrdererCapabilities
+
+Channel: &ChannelDefaults
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+
+  Capabilities:
+    <<: *ChannelCapabilities
+
+Profiles:
+  FogbedGenesis:
+    <<: *ChannelDefaults
+
+    Orderer:
+      <<: *OrdererDefaults
+
+      Organizations:
+        - *OrdererOrg
+
+    Consortiums:
+      SampleConsortium:
+        Organizations:
+          - *Org1
