@@ -7,7 +7,6 @@ from fogbed import (
 # Nível de log
 setLogLevel('info')
 
-#TODO: estou configurando novamente o ambiente do fogbed para realização das integrações
 # Criando experimento Fogbedls
 
 exp = FogbedExperiment()
@@ -20,7 +19,7 @@ fog = exp.add_virtual_instance('fog')
 
 # Container com ferramentas do Hyperledger Fabric
 fabric_tools = Container(
-    'fabric-tools',
+    'ftools',
     ip='10.0.0.10',
     dimage='hyperledger/fabric-tools:2.5'
 )
