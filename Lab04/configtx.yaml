@@ -1,0 +1,350 @@
+# ============================================================
+# Hyperledger Fabric - configtx.yaml
+#
+# Arquivo responsável por definir a configuração inicial
+# da rede Fabric.
+#
+# Utilizado pelo utilitário:
+#
+#     configtxgen
+#
+# Exemplo:
+#
+#     configtxgen \
+#       -profile FogbedGenesis \
+#       -channelID system-channel \
+#       -outputBlock genesis.block
+#
+#
+# Este laboratório utiliza:
+#
+# - Hyperledger Fabric 2.5
+# - Orderer único
+# - Consenso Raft (etcdraft)
+# - Uma organização de Peer
+#
+# Objetivo atual:
+#
+# Criar apenas o Genesis Block do Orderer.
+#
+# ============================================================
+
+# ============================================================
+# Organizations
+#
+# Define as organizações conhecidas pela rede.
+#
+# Cada organização possui:
+#
+# Name:
+#   Nome lógico.
+#
+# ID:
+#   Identificador MSP.
+#
+# MSPDir:
+#   Caminho para os certificados MSP gerados pelo cryptogen.
+#
+# Policies:
+#   Regras internas da organização.
+#
+# ============================================================
+
+Organizations:
+  # ----------------------------------------------------------
+  # Organização responsável pelo Orderer
+  #
+  # O Orderer precisa de uma organização própria.
+  #
+  # ----------------------------------------------------------
+
+  - &OrdererOrg
+    Name: OrdererMSP
+
+    ID: OrdererMSP
+
+    MSPDir: crypto-material/ordererOrganizations/example.com/msp
+
+    Policies:
+      Readers:
+        Type: Signature
+
+        Rule: "OR('OrdererMSP.member')"
+
+      Writers:
+        Type: Signature
+
+        Rule: "OR('OrdererMSP.member')"
+
+      Admins:
+        Type: Signature
+
+        Rule: "OR('OrdererMSP.admin')"
+
+  # ----------------------------------------------------------
+  # Organização dos Peers
+  #
+  # Será utilizada posteriormente nos experimentos
+  # de criação de canal e comunicação Peer-Orderer.
+  #
+  # ----------------------------------------------------------
+
+  - &Org1
+    Name: Org1MSP
+
+    ID: Org1MSP
+
+    MSPDir: crypto-material/peerOrganizations/org1.example.com/msp
+
+    Policies:
+      Readers:
+        Type: Signature
+
+        Rule: "OR('Org1MSP.member')"
+
+      Writers:
+        Type: Signature
+
+        Rule: "OR('Org1MSP.member')"
+
+      Admins:
+        Type: Signature
+
+        Rule: "OR('Org1MSP.admin')"
+
+# ============================================================
+# Capabilities
+#
+# Recursos habilitados pela versão do Fabric.
+#
+# Fabric 2.x utiliza V2_0.
+#
+# Os anchors permitem reutilizar os blocos.
+#
+# ============================================================
+
+Capabilities:
+  Channel: &ChannelCapabilities
+    V2_0: true
+
+  Orderer: &OrdererCapabilities
+    V2_0: true
+
+  Application: &ApplicationCapabilities
+    V2_0: true
+
+# ============================================================
+# Application
+#
+# Configuração das organizações de aplicação.
+#
+# Neste experimento ainda não existe canal.
+#
+# Mantido vazio porque faz parte da estrutura padrão.
+#
+# ============================================================
+
+Application:
+  Organizations:
+
+# ============================================================
+# Orderer
+#
+# Configuração global do serviço Orderer.
+#
+# Define:
+#
+# - tipo de consenso;
+# - participantes Raft;
+# - políticas;
+# - capacidades.
+#
+# ============================================================
+
+Orderer:
+  # Consenso utilizado pelo Fabric 2.5
+
+  OrdererType: etcdraft
+
+  # Endereço do Orderer
+
+  Addresses:
+    - orderer0.example.com:7050
+
+  # Configuração do cluster Raft
+
+  EtcdRaft:
+    Consenters:
+      - Host: orderer0.example.com
+
+        Port: 7050
+
+        ClientTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+
+        ServerTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+
+  # Organização administrativa do Orderer
+
+  Organizations:
+    - *OrdererOrg
+
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+
+      Rule: "ANY Readers"
+
+    Writers:
+      Type: ImplicitMeta
+
+      Rule: "ANY Writers"
+
+    Admins:
+      Type: ImplicitMeta
+
+      Rule: "MAJORITY Admins"
+
+    # Política obrigatória no Fabric 2.x.
+    #
+    # Define quem pode validar blocos adicionados
+    # ao ledger.
+
+    BlockValidation:
+      Type: ImplicitMeta
+
+      Rule: "ANY Writers"
+
+  Capabilities:
+    <<: *OrdererCapabilities
+
+# ============================================================
+# Channel
+#
+# Políticas globais do grupo de canais.
+#
+# ============================================================
+
+Channel:
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+
+      Rule: "ANY Readers"
+
+    Writers:
+      Type: ImplicitMeta
+
+      Rule: "ANY Writers"
+
+    Admins:
+      Type: ImplicitMeta
+
+      Rule: "MAJORITY Admins"
+
+  Capabilities:
+    <<: *ChannelCapabilities
+
+# ============================================================
+# Profiles
+#
+# Profiles são modelos usados pelo configtxgen.
+#
+# O script chama:
+#
+#     -profile FogbedGenesis
+#
+# Portanto o nome precisa ser exatamente igual.
+#
+# ============================================================
+
+Profiles:
+  # ==========================================================
+  # Genesis Block do sistema
+  #
+  # Primeiro bloco criado pelo Orderer.
+  #
+  # Contém:
+  #
+  # - configuração do Orderer;
+  # - organizações;
+  # - consortium inicial.
+  #
+  # ==========================================================
+
+  FogbedGenesis:
+    # Políticas do Channel Group raiz
+
+    Policies:
+      Readers:
+        Type: ImplicitMeta
+
+        Rule: "ANY Readers"
+
+      Writers:
+        Type: ImplicitMeta
+
+        Rule: "ANY Writers"
+
+      Admins:
+        Type: ImplicitMeta
+
+        Rule: "MAJORITY Admins"
+
+    # --------------------------------------------------------
+    # Configuração do Orderer dentro do Genesis
+    # --------------------------------------------------------
+
+    Orderer:
+      OrdererType: etcdraft
+
+      Addresses:
+        - orderer0.example.com:7050
+
+      EtcdRaft:
+        Consenters:
+          - Host: orderer0.example.com
+
+            Port: 7050
+
+            ClientTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+
+            ServerTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+
+      Organizations:
+        - *OrdererOrg
+
+      Policies:
+        Readers:
+          Type: ImplicitMeta
+
+          Rule: "ANY Readers"
+
+        Writers:
+          Type: ImplicitMeta
+
+          Rule: "ANY Writers"
+
+        Admins:
+          Type: ImplicitMeta
+
+          Rule: "MAJORITY Admins"
+
+        BlockValidation:
+          Type: ImplicitMeta
+
+          Rule: "ANY Writers"
+
+      Capabilities:
+        <<: *OrdererCapabilities
+
+    # --------------------------------------------------------
+    # Consortium inicial
+    #
+    # Define quais organizações podem criar canais.
+    #
+    # --------------------------------------------------------
+
+    Consortiums:
+      FogbedConsortium:
+        Organizations:
+          - *Org1

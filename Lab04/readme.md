@@ -1,0 +1,1 @@
+sudo -E python3 experiment01_orderer_with_genesis.py

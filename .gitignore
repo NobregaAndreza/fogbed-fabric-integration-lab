@@ -141,12 +141,8 @@ target/
 *.iso
 
 # ==========================================
-# Lab03 - Generated Fabric artifacts
+# Generated Fabric artifacts
 # ==========================================
 
-Lab03/crypto-material/
-Lab03/channel-artifacts/
-
-# Caso futuramente existam outros labs
 **/crypto-material/
 **/channel-artifacts/
