@@ -267,6 +267,14 @@ Padronizar a saída dos experimentos e, posteriormente:
 - facilitar leitura dos diagnósticos;
 - centralizar a apresentação em funções reutilizáveis.
 
+ **Integração contínua (CI)**
+  - Validar código Python e scripts do projeto.
+  - Validar arquivos de configuração Fabric.
+  - Testar a geração dos artefatos criptográficos.
+  - Testar a geração do Genesis Block.
+  - Executar testes automatizados das abstrações do plugin.
+  - Investigar futuramente testes de integração com Fogbed/Containernet.
+
 ---
 
 ## 📂 Organização
