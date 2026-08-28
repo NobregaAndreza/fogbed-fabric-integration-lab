@@ -1,0 +1,45 @@
+# ============================================================
+# Hyperledger Fabric - crypto-config.yaml (Lab05)
+#
+# Este arquivo define a topologia de identidades criptográficas
+# (certificados X.509, chaves privadas e estruturas MSP) que
+# serão geradas pelo utilitário `cryptogen`.
+#
+# Estrutura gerada:
+# - Orgs do tipo Orderer (OrdererOrgs)
+# - Orgs do tipo Peer (PeerOrgs)
+#
+# Para o Lab05:
+# - 1 Organização Orderer (domain: example.com, Hostname: orderer0)
+# - 1 Organização Peer (Org1, domain: org1.example.com, Hostname: peer0)
+# ============================================================
+
+# ------------------------------------------------------------
+# Organização do Orderer (OrdererOrgs)
+# ------------------------------------------------------------
+OrdererOrgs:
+  - Name: Orderer
+    Domain: example.com
+    # Define a lista explícita de hostnames pertencentes a esta organização de Orderers
+    Specs:
+      - Hostname: orderer0
+
+# ------------------------------------------------------------
+# Organização do Peer (PeerOrgs)
+# ------------------------------------------------------------
+PeerOrgs:
+  - Name: Org1
+    Domain: org1.example.com
+    
+    # NodeOUs (Node Organizational Units) permite que o Fabric identifique
+    # a função das identidades (Client, Peer, Admin, Orderer) através de OUs nos certificados X.509.
+    EnableNodeOUs: true
+
+    # Specs define os peers especificamente por nome.
+    # Gera a estrutura: peerOrganizations/org1.example.com/peers/peer0.org1.example.com/
+    Specs:
+      - Hostname: peer0
+
+    # Certificados de Usuários adicionais gerados para a organização (ex: Admin e User1)
+    Users:
+      Count: 1

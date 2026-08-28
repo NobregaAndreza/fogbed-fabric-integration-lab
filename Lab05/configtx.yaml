@@ -1,0 +1,196 @@
+# ============================================================
+# Hyperledger Fabric - configtx.yaml (Lab05)
+#
+# Arquivo responsável por definir a estrutura inicial da rede Fabric,
+# utilizado pela ferramenta `configtxgen`.
+#
+# No Lab05:
+# - Define as organizações OrdererMSP e Org1MSP.
+# - Define o consenso Raft (etcdraft) para o Orderer.
+# - Define o consórcio FogbedConsortium contendo a Org1MSP.
+# - Gera exclusivamente o bloco gênesis do canal de sistema (genesis.block).
+# ============================================================
+
+# ============================================================
+# Organizations
+#
+# Define as organizações participantes da rede e seus MSPs.
+# ============================================================
+Organizations:
+  # ----------------------------------------------------------
+  # Organização responsável pelo serviço de ordenação (Orderer)
+  # ----------------------------------------------------------
+  - &OrdererOrg
+    Name: OrdererMSP
+    ID: OrdererMSP
+    MSPDir: crypto-material/ordererOrganizations/example.com/msp
+
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Writers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Admins:
+        Type: Signature
+        Rule: "OR('OrdererMSP.admin')"
+
+  # ----------------------------------------------------------
+  # Organização dos Peers (Org1)
+  # ----------------------------------------------------------
+  - &Org1
+    Name: Org1MSP
+    ID: Org1MSP
+    MSPDir: crypto-material/peerOrganizations/org1.example.com/msp
+
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('Org1MSP.member')"
+      Writers:
+        Type: Signature
+        Rule: "OR('Org1MSP.member')"
+      Admins:
+        Type: Signature
+        Rule: "OR('Org1MSP.admin')"
+
+# ============================================================
+# Capabilities
+#
+# Define os recursos e versões de protocolo suportados pela rede Fabric.
+# Fabric 2.5 utiliza o padrão V2_0.
+# ============================================================
+Capabilities:
+  Channel: &ChannelCapabilities
+    V2_0: true
+
+  Orderer: &OrdererCapabilities
+    V2_0: true
+
+  Application: &ApplicationCapabilities
+    V2_0: true
+
+# ============================================================
+# Application
+#
+# Seção de aplicações nos canais (vazia por padrão aqui).
+# ============================================================
+Application:
+  Organizations:
+
+# ============================================================
+# Orderer
+#
+# Configuração global do serviço de ordenamento.
+# ============================================================
+Orderer:
+  # Consenso etcdraft (Raft) utilizado a partir do Fabric 2.0
+  OrdererType: etcdraft
+
+  # Endereço e porta gRPC do Orderer
+  Addresses:
+    - orderer0.example.com:7050
+
+  # Configuração dos membros notificadores do cluster Raft
+  EtcdRaft:
+    Consenters:
+      - Host: orderer0.example.com
+        Port: 7050
+        ClientTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+        ServerTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+
+  Organizations:
+    - *OrdererOrg
+
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    BlockValidation:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+
+  Capabilities:
+    <<: *OrdererCapabilities
+
+# ============================================================
+# Channel
+#
+# Políticas do canal raiz do sistema.
+# ============================================================
+Channel:
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+
+  Capabilities:
+    <<: *ChannelCapabilities
+
+# ============================================================
+# Profiles
+#
+# Modelos utilizados pelo `configtxgen -profile <NomeDoPerfil>`
+# ============================================================
+Profiles:
+  # ----------------------------------------------------------
+  # Perfil para geração do Bloco Gênesis (System Channel)
+  # ----------------------------------------------------------
+  FogbedGenesis:
+    Policies:
+      Readers:
+        Type: ImplicitMeta
+        Rule: "ANY Readers"
+      Writers:
+        Type: ImplicitMeta
+        Rule: "ANY Writers"
+      Admins:
+        Type: ImplicitMeta
+        Rule: "MAJORITY Admins"
+
+    Orderer:
+      OrdererType: etcdraft
+      Addresses:
+        - orderer0.example.com:7050
+      EtcdRaft:
+        Consenters:
+          - Host: orderer0.example.com
+            Port: 7050
+            ClientTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+            ServerTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+      Organizations:
+        - *OrdererOrg
+      Policies:
+        Readers:
+          Type: ImplicitMeta
+          Rule: "ANY Readers"
+        Writers:
+          Type: ImplicitMeta
+          Rule: "ANY Writers"
+        Admins:
+          Type: ImplicitMeta
+          Rule: "MAJORITY Admins"
+        BlockValidation:
+          Type: ImplicitMeta
+          Rule: "ANY Writers"
+      Capabilities:
+        <<: *OrdererCapabilities
+
+    # Consórcio inicial: define quais orgs pertencem ao grupo habilitado a criar canais
+    Consortiums:
+      FogbedConsortium:
+        Organizations:
+          - *Org1
