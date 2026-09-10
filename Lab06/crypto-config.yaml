@@ -1,0 +1,21 @@
+# ============================================================
+# Hyperledger Fabric - crypto-config.yaml (Lab06)
+#
+# Reaproveita a configuração validada no Lab05. O objetivo aqui é
+# manter a baseline mínima: 1 Orderer + 1 Peer + 1 organização de Peer.
+# ============================================================
+
+OrdererOrgs:
+  - Name: Orderer
+    Domain: example.com
+    Specs:
+      - Hostname: orderer0
+
+PeerOrgs:
+  - Name: Org1
+    Domain: org1.example.com
+    EnableNodeOUs: true
+    Specs:
+      - Hostname: peer0
+    Users:
+      Count: 1

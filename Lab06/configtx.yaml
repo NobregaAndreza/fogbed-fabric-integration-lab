@@ -1,0 +1,173 @@
+# ============================================================
+# Hyperledger Fabric - configtx.yaml (Lab06)
+#
+# Reaproveita a configuração funcional do Lab05. Esta é a base
+# mínima necessária para atingir o primeiro canal em etapas futuras.
+# ============================================================
+
+Organizations:
+  - &OrdererOrg
+    Name: OrdererMSP
+    ID: OrdererMSP
+    MSPDir: crypto-material/ordererOrganizations/example.com/msp
+
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Writers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Admins:
+        Type: Signature
+        Rule: "OR('OrdererMSP.admin')"
+
+  - &Org1
+    Name: Org1MSP
+    ID: Org1MSP
+    MSPDir: crypto-material/peerOrganizations/org1.example.com/msp
+
+    Policies: &Org1Policies
+      Readers:
+        Type: Signature
+        Rule: "OR('Org1MSP.member')"
+      Writers:
+        Type: Signature
+        Rule: "OR('Org1MSP.member')"
+      Admins:
+        Type: Signature
+        Rule: "OR('Org1MSP.admin')"
+
+Capabilities:
+  Channel: &ChannelCapabilities
+    V2_0: true
+  Orderer: &OrdererCapabilities
+    V2_0: true
+  Application: &ApplicationCapabilities
+    V2_0: true
+
+Application:
+  Organizations:
+
+Orderer: &OrdererDefaults
+  OrdererType: etcdraft
+  Addresses:
+    - orderer0.example.com:7050
+  EtcdRaft:
+    Consenters:
+      - Host: orderer0.example.com
+        Port: 7050
+        ClientTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+        ServerTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+  Organizations:
+    - *OrdererOrg
+
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    BlockValidation:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+
+  Capabilities:
+    <<: *OrdererCapabilities
+
+Channel: &ChannelDefaults
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+
+  Capabilities:
+    <<: *ChannelCapabilities
+
+Profiles:
+  # Bloco inicial do application channel; independente do bootstrap da baseline.
+  FogbedApplicationChannel:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+    Application:
+      Organizations:
+        - <<: *Org1
+          Policies:
+            <<: *Org1Policies
+            Endorsement:
+              Type: Signature
+              Rule: "OR('Org1MSP.peer')"
+      Policies:
+        Readers:
+          Type: ImplicitMeta
+          Rule: "ANY Readers"
+        Writers:
+          Type: ImplicitMeta
+          Rule: "ANY Writers"
+        Admins:
+          Type: ImplicitMeta
+          Rule: "MAJORITY Admins"
+        LifecycleEndorsement:
+          Type: ImplicitMeta
+          Rule: "MAJORITY Endorsement"
+        Endorsement:
+          Type: ImplicitMeta
+          Rule: "MAJORITY Endorsement"
+      Capabilities:
+        <<: *ApplicationCapabilities
+
+  FogbedGenesis:
+    Policies:
+      Readers:
+        Type: ImplicitMeta
+        Rule: "ANY Readers"
+      Writers:
+        Type: ImplicitMeta
+        Rule: "ANY Writers"
+      Admins:
+        Type: ImplicitMeta
+        Rule: "MAJORITY Admins"
+
+    Orderer:
+      OrdererType: etcdraft
+      Addresses:
+        - orderer0.example.com:7050
+      EtcdRaft:
+        Consenters:
+          - Host: orderer0.example.com
+            Port: 7050
+            ClientTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+            ServerTLSCert: crypto-material/ordererOrganizations/example.com/orderers/orderer0.example.com/tls/server.crt
+      Organizations:
+        - *OrdererOrg
+      Policies:
+        Readers:
+          Type: ImplicitMeta
+          Rule: "ANY Readers"
+        Writers:
+          Type: ImplicitMeta
+          Rule: "ANY Writers"
+        Admins:
+          Type: ImplicitMeta
+          Rule: "MAJORITY Admins"
+        BlockValidation:
+          Type: ImplicitMeta
+          Rule: "ANY Writers"
+      Capabilities:
+        <<: *OrdererCapabilities
+
+    Consortiums:
+      FogbedConsortium:
+        Organizations:
+          - *Org1
