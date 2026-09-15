@@ -1,0 +1,1 @@
+../../Lab06/scripts/generate-crypto.sh

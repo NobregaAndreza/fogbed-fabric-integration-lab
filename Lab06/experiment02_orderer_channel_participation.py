@@ -11,6 +11,7 @@ from fogbed import FogbedExperiment
 
 
 def main():
+    """Orquestra esta etapa isoladamente; mantém inspeção até ENTER e retorna 0/1."""
     prepare_environment(application_channel=True)
     exp = FogbedExperiment()
     cloud = exp.add_virtual_instance('cloud')

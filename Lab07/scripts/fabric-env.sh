@@ -1,0 +1,1 @@
+../../Lab06/scripts/fabric-env.sh

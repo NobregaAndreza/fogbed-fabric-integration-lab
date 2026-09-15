@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ingresso de um único Orderer usando o bloco existente; nenhum Peer."""
+"""Prepara artefatos e ingressa um único Orderer no canal; nenhum Peer."""
 from common import (
     prepare_environment, create_orderer, get_container_real_ip,
     check_container_process, check_container_logs, check_orderer_participation_api,
@@ -9,7 +9,8 @@ from fogbed import FogbedExperiment
 
 
 def main():
-    prepare_environment(application_channel=True, require_existing=True)
+    """Orquestra esta etapa isoladamente; mantém inspeção até ENTER e retorna 0/1."""
+    prepare_environment(application_channel=True)
     exp = FogbedExperiment()
     cloud = exp.add_virtual_instance('cloud')
     orderer = create_orderer(channel_participation=True)

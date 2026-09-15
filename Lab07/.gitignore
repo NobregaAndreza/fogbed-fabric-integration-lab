@@ -1,0 +1,6 @@
+crypto-material/
+channel-artifacts/
+chaincode-packages/
+# Fontes e dependências dos chaincodes permanecem somente no ambiente local.
+chaincodes/
+__pycache__/
