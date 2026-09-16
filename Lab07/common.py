@@ -542,3 +542,134 @@ def show_command(label, result):
         print(result.stdout.strip())
     if result.stderr.strip():
         print(result.stderr.strip())
+
+
+def run_peer_cli(peer, peer_ip, command_args, timeout=90):
+    """Executa um comando genérico da CLI do Fabric (peer ...) no container do Peer via Docker exec.
+
+    command_args contém a sublista de argumentos a ser passada ao binário `peer`,
+    por exemplo ['chaincode', 'invoke', ...].
+    """
+    docker = getattr(getattr(peer, '_service', None), 'docker', None)
+    container_id = getattr(docker, 'did', None)
+    if not container_id:
+        raise RuntimeError('ID Docker ausente no serviço Fogbed do Peer')
+    env = dict(peer.environment)
+    env['CORE_PEER_MSPCONFIGPATH'] = infra.PEER_ADMIN_MSP
+    port = env['CORE_PEER_LISTENADDRESS'].rsplit(':', 1)[1]
+    env['CORE_PEER_ADDRESS'] = f'{peer_ip}:{port}'
+    env['CORE_PEER_TLS_SERVERHOSTOVERRIDE'] = env['CORE_PEER_ID']
+    command = ['docker', 'exec']
+    for key, value in env.items():
+        command += ['--env', f'{key}={value}']
+    command += [str(container_id), 'peer', *map(str, command_args)]
+    return run_command(command, timeout=timeout)
+
+
+def invoke_chaincode(peer, peer_ip, orderer, channel_name, chaincode_name, function, args=None, timeout=90):
+    """Executa peer chaincode invoke no canal/chaincode especificando a função e argumentos.
+
+    Formata o construtor JSON -c '{"Args":[function, arg1, arg2, ...]}' e envia a transação
+    ao Ordering Service utilizando as flags gRPC/TLS derivadas do Orderer, aguardando o commit.
+    Retorna CompletedProcess após exit 0. Falhas ou timeouts levantam RuntimeError.
+    """
+    if args is None:
+        args = []
+    ctor_payload = json.dumps({'Args': [function] + [str(a) for a in args]})
+    arguments = [
+        'chaincode', 'invoke',
+        *_orderer_arguments(peer, orderer),
+        '-C', channel_name,
+        '-n', chaincode_name,
+        '-c', ctor_payload,
+        '--waitForEvent',
+        '--waitForEventTimeout', '60s'
+    ]
+    return run_peer_cli(peer, peer_ip, arguments, timeout=timeout)
+
+
+def query_chaincode(peer, peer_ip, channel_name, chaincode_name, function, args=None, timeout=30):
+    """Executa peer chaincode query no canal/chaincode especificando a função e argumentos.
+
+    Formata o construtor JSON -c '{"Args":[function, arg1, arg2, ...]}'.
+    Retorna CompletedProcess com a resposta em stdout. Falhas levantam RuntimeError.
+    """
+    if args is None:
+        args = []
+    ctor_payload = json.dumps({'Args': [function] + [str(a) for a in args]})
+    arguments = [
+        'chaincode', 'query',
+        '-C', channel_name,
+        '-n', chaincode_name,
+        '-c', ctor_payload
+    ]
+    return run_peer_cli(peer, peer_ip, arguments, timeout=timeout)
+
+
+def check_orderer_block_created(orderer):
+    """Verifica se o Orderer gerou/escreveu um novo bloco nos logs recentes.
+
+    Retorna (sucesso, block_number, evidencia).
+    """
+    import re
+    candidate_names = [orderer.name, f'mn.{orderer.name}', f'{orderer.name}.fogbed']
+    logs = ''
+    for c_name in candidate_names:
+        try:
+            logs = subprocess.check_output(['docker', 'logs', '--tail', '50', c_name],
+                                           stderr=subprocess.STDOUT, text=True).strip()
+            if logs:
+                break
+        except Exception:
+            pass
+
+    blocks = re.findall(r'(?:Created|Writing)\s+block\s+\[?(\d+)\]?', logs, re.IGNORECASE)
+    if blocks:
+        latest_block = int(blocks[-1])
+        return True, latest_block, f'Novo bloco {latest_block} gerado/escrito pelo Orderer'
+    return False, None, 'Nenhuma evidência de novo bloco nos logs do Orderer'
+
+
+def check_peer_block_committed(peer, channel_name='mychannel', expected_block=None, timeout=10, delay=0.5):
+    """Verifica se o Peer recebeu, validou e commitou o bloco esperado no ledger.
+
+    Utiliza polling limitado para aguardar a recepção, validação e commit do bloco N.
+    Retorna (sucesso, evidencia).
+    """
+    import re
+    import time
+    if expected_block is None:
+        return False, 'Bloco esperado não especificado para a validação do Peer'
+
+    block_str = str(expected_block)
+    candidate_names = [peer.name, f'mn.{peer.name}', f'{peer.name}.fogbed']
+    start_time = time.time()
+    last_evidence = ''
+
+    while time.time() - start_time < timeout:
+        logs = ''
+        for c_name in candidate_names:
+            try:
+                logs = subprocess.check_output(['docker', 'logs', '--tail', '100', c_name],
+                                               stderr=subprocess.STDOUT, text=True).strip()
+                if logs:
+                    break
+            except Exception:
+                pass
+
+        has_received = bool(re.search(rf'Received\s+block\s+\[?{block_str}\]?', logs, re.IGNORECASE))
+        has_validated = bool(re.search(rf'Validated\s+block\s+\[?{block_str}\]?', logs, re.IGNORECASE))
+        has_committed = bool(re.search(rf'Committed\s+block\s+\[?{block_str}\]?', logs, re.IGNORECASE))
+
+        if has_received and has_validated and has_committed:
+            return True, f'Bloco {block_str} recebido, validado e committed no ledger {channel_name}'
+
+        missing = []
+        if not has_received: missing.append('Received')
+        if not has_validated: missing.append('Validated')
+        if not has_committed: missing.append('Committed')
+        last_evidence = f'Aguardando bloco {block_str} ({", ".join(missing)} pendente)'
+
+        time.sleep(delay)
+
+    return False, f'Timeout aguardando commit do bloco {block_str} no Peer: {last_evidence}'

@@ -6,12 +6,9 @@
 - **Experiment 02 — approveformyorg [VALIDADO]**
 - **Experiment 03 — commit/querycommitted [VALIDADO]**
 - **Experiment 03b — Runtime Chaincode → Peer [VALIDADO]**
-- **Experiment 04 — invoke/query [PRÓXIMO]**
+- **Experiment 04 — invoke/query [VALIDADO]**
 
-Reconstruir a rede mínima validada no Lab06 e comprovar que o lifecycle de um chaincode local
-pode ser executado e registrado no Peer. Os Experimentos 01, 02, 03 e 03b foram validados manualmente.
-No Experiment 03b, o endpoint operacional do chaincode é resolvido dinamicamente na inicialização do container.
-O próximo passo do Lab07 é o Experiment 04 (operações de negócio `invoke` e `query`).
+Reconstruir a rede mínima validada no Lab06 e comprovar que o lifecycle e a execução de transações de negócio (`invoke` e `query`) do chaincode `basic` funcionam e persistem o estado no ledger do canal `mychannel` no ambiente Fogbed + Hyperledger Fabric 2.5. Os Experimentos 01, 02, 03, 03b e 04 foram validados manualmente com sucesso. O Lab07 está concluído.
 
 ## Relação com o Lab06 e independência
 
@@ -29,11 +26,12 @@ Não execute Labs simultaneamente: os nomes orderer0/peer0 são compartilhados.
 
 ```text
 Lab07/
-  common.py                            # infraestrutura reutilizada + lifecycle
+  common.py                            # infraestrutura reutilizada + lifecycle + invoke/query
   experiment01_package_install.py      # package/install/queryinstalled
   experiment02_approve_chaincode.py     # até aprovação da organização
   experiment03_commit_chaincode.py      # até commit e consulta da definição
   experiment03b_chaincode_runtime.py   # endpoint dinâmico, runtime e registro do cc
+  experiment04_invoke_query.py         # transações de negócio invoke e query
   configtx.yaml -> ../Lab06/configtx.yaml
   crypto-config.yaml -> ../Lab06/crypto-config.yaml
   scripts/                             # links internos para geradores validados
@@ -512,3 +510,11 @@ O endereço planejado da topologia Fogbed (`10.0.0.20`) e o endpoint operacional
 O `CORE_PEER_CHAINCODEADDRESS` é resolvido dinamicamente durante a inicialização do container a partir da interface `eth0` (onde o Docker atribui o IP operacional), e não hardcoded.
 Isso garante que o Peer anuncie ao runtime (NetworkMode=host) um endpoint TCP alcançável em `:7052`, permitindo a conexão e o registro do chaincode sem alterar os listeners nem atribuir IPs manualmente a `peer0-eth0`.
 A limitação da interface `peer0-eth0` permanecer sem IPv4 continua documentada como uma restrição identificada da integração Fogbed/Containernet.
+
+### RESULTADO EXPERIMENTAL - EXPERIMENT 04 (INVOKE E QUERY DE NEGÓCIO) [VALIDADO]
+
+O Experiment 04 comprovou a execução funcional de transações de negócio no ambiente Hyperledger Fabric + Fogbed:
+
+- **Operação de escrita (`CreateAsset`):** Submissão da proposta de transação ao Orderer via gRPC com TLS e `ordererTLSHostnameOverride`. O Orderer gerou e escreveu um novo bloco `N`, e o Peer recebeu (`Received block [N]`), validou (`Validated block [N]`) e comitou (`Committed block [N]`) a transação válida no ledger do canal `mychannel`.
+- **Operação de leitura (`ReadAsset`):** Consulta do estado persistido via `peer chaincode query` e confirmação semântica dos campos retornados (`ID`, `Color`, `Size`, `Owner`, `AppraisedValue`).
+- **Conclusão do Lab07:** O Lab07 completou com sucesso a cadeia de empacotamento, instalação, aprovação, commit de definição, inicialização de runtime, registro no Peer, execução de transações de negócio e consulta de estado no ledger.

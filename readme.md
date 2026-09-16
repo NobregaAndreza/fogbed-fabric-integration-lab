@@ -127,14 +127,13 @@ Essa estratégia permite identificar separadamente problemas relacionados ao **F
 - Join de Peer e Orderer em `mychannel`.
 - Validação de entrega de blocos (delivery).
 
-### 🚧 Lab07 — Lifecycle de Chaincode `IN PROGRESS`
+### ✅ Lab07 — Lifecycle e Execução de Chaincode `DONE`
 
 - Empacotamento, instalação e consulta de pacotes de chaincode (`basic`).
 - Aprovação da definição da organização (`approveformyorg`).
 - Verificação de prontidão, commit e consulta de definição no canal (`checkcommitreadiness`, `commit`, `querycommitted`).
-- Resolução dinâmica do endpoint do Peer e validação do runtime e registro do chaincode.
-
-> O Experiment 04 (invoke/query de negócio no ledger) é o próximo passo do Lab07.
+- Resolução dinâmica do endpoint do Peer e validação do runtime e registro do chaincode (`experiment03b`).
+- Execução de transações de negócio (`invoke` / `CreateAsset`), commit no ledger do canal `mychannel` e confirmação semântica por `query` (`ReadAsset`) (`experiment04`).
 
 ### ⏳ Lab08 — Arquitetura e Abstração / Plugin `TODO`
 
@@ -154,7 +153,7 @@ Essa estratégia permite identificar separadamente problemas relacionados ao **F
 | Lab04 | Orderer | ✅ Done |
 | Lab05 | Peer | ✅ Done |
 | Lab06 | Peer ↔ Orderer | ✅ Done |
-| Lab07 | Lifecycle de Chaincode | 🚧 In Progress |
+| Lab07 | Lifecycle e Execução de Chaincode | ✅ Done |
 | Lab08 | Arquitetura / Plugin | ⏳ Todo |
 
 ---
@@ -300,11 +299,11 @@ Os READMEs individuais registram:
 
 ## 🔬 Estado atual
 
-O **Hyperledger Fabric 2.5** foi integrado ao **Fogbed** com sucesso até a validação do registro do runtime do chaincode no **Lab07**.
+O **Hyperledger Fabric 2.5** foi integrado ao **Fogbed** com sucesso até a validação completa do lifecycle e da execução funcional de transações de negócio no **Lab07**.
 
-Foram validados: a comunicação Peer ↔ Orderer via gRPC/TLS, o bootstrap por canal de aplicação via `osnadmin`, a entrega de blocos (delivery), o empacotamento, instalação, aprovação e commit de definições de chaincode, e a resolução dinâmica do endpoint do Peer (`CORE_PEER_CHAINCODEADDRESS`) para a conexão e registro estável do container de runtime do chaincode (`experiment03b`).
+Foram validados: a comunicação Peer ↔ Orderer via gRPC/TLS, o bootstrap por canal de aplicação via `osnadmin`, a entrega de blocos (delivery), o empacotamento, instalação, aprovação e commit de definições de chaincode, a resolução dinâmica do endpoint do Peer (`CORE_PEER_CHAINCODEADDRESS`), o registro do runtime, a execução de transações (`CreateAsset`), o commit de novos blocos no ledger e a consulta semântica do estado persistido (`ReadAsset`).
 
-O trabalho atual está concentrado na validação de transações de negócio (`invoke` e `query`) no **Experiment 04** do Lab07, como etapa final antes da criação da abstração/plugin da integração.
+O Lab07 está concluído. A base experimental construída servirá como fundação para a futura abstração/plugin da integração.
 
 ---
 
