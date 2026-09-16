@@ -110,7 +110,7 @@ Essa estratégia permite identificar separadamente problemas relacionados ao **F
 - Inicialização do System Channel.
 - Eleição do Orderer como líder Raft.
 
-### 🚧 Lab05 — Peer Hyperledger Fabric `IN PROGRESS`
+### ✅ Lab05 — Peer Hyperledger Fabric `DONE`
 
 - Inicialização de um Peer no Fogbed.
 - MSP e identidade da organização.
@@ -118,38 +118,28 @@ Essa estratégia permite identificar separadamente problemas relacionados ao **F
 - Serviço gRPC.
 - Operations Service e health checks.
 - Execução conjunta de Peer e Orderer.
-- Investigação da comunicação entre os componentes.
 
-> Os diagnósticos de conectividade Peer ↔ Orderer ainda estão em investigação e não devem ser considerados validados.
-
-### ⏳ Lab06 — Peer ↔ Orderer `TODO`
+### ✅ Lab06 — Peer ↔ Orderer `DONE`
 
 - Validação da comunicação entre Peer e Orderer.
-- Testes da conectividade necessária aos serviços Fabric.
+- Mapeamento dinâmico de nomes TLS em `/etc/hosts`.
+- Bootstrap sem system channel via API `osnadmin` (channel participation).
+- Join de Peer e Orderer em `mychannel`.
+- Validação de entrega de blocos (delivery).
 
-### ⏳ Lab07 — Certificate Authority `TODO`
+### 🚧 Lab07 — Lifecycle de Chaincode `IN PROGRESS`
 
-- Estudo do Fabric CA.
-- Integração da autoridade certificadora ao ambiente.
+- Empacotamento, instalação e consulta de pacotes de chaincode (`basic`).
+- Aprovação da definição da organização (`approveformyorg`).
+- Verificação de prontidão, commit e consulta de definição no canal (`checkcommitreadiness`, `commit`, `querycommitted`).
+- Resolução dinâmica do endpoint do Peer e validação do runtime e registro do chaincode.
 
-### ⏳ Lab08 — Canal `TODO`
+> O Experiment 04 (invoke/query de negócio no ledger) é o próximo passo do Lab07.
 
-- Criação de canais.
-- Participação das organizações.
-- Entrada de Peers nos canais.
-- Validação da comunicação no contexto de um canal.
+### ⏳ Lab08 — Arquitetura e Abstração / Plugin `TODO`
 
-### ⏳ Lab09 — Chaincode `TODO`
-
-- Instalação e execução de chaincodes.
-- Execução de transações.
-- Validação do ledger.
-
-### ⏳ Lab10 — Arquitetura completa `TODO`
-
-- Integração dos componentes validados nos experimentos anteriores.
-- Execução de uma rede Fabric completa sobre o Fogbed.
-- Base experimental para abstração da integração.
+- Abstração modular dos componentes validados nos laboratórios anteriores.
+- Configuração parametrizada e extensível de redes Fabric no Fogbed.
 
 ---
 
@@ -162,12 +152,10 @@ Essa estratégia permite identificar separadamente problemas relacionados ao **F
 | Lab02 | Containers personalizados | ✅ Done |
 | Lab03 | Docker + Fogbed | ✅ Done |
 | Lab04 | Orderer | ✅ Done |
-| Lab05 | Peer | 🚧 In Progress |
-| Lab06 | Peer ↔ Orderer | ⏳ Todo |
-| Lab07 | Certificate Authority | ⏳ Todo |
-| Lab08 | Canal | ⏳ Todo |
-| Lab09 | Chaincode | ⏳ Todo |
-| Lab10 | Arquitetura completa | ⏳ Todo |
+| Lab05 | Peer | ✅ Done |
+| Lab06 | Peer ↔ Orderer | ✅ Done |
+| Lab07 | Lifecycle de Chaincode | 🚧 In Progress |
+| Lab08 | Arquitetura / Plugin | ⏳ Todo |
 
 ---
 
@@ -290,10 +278,12 @@ fogbed-fabric-integration-lab/
 ├── Lab03/
 ├── Lab04/
 ├── Lab05/
+├── Lab06/
+├── Lab07/
 │
 ├── third_party/
 │
-└── README.md
+└── readme.md
 ```
 
 Os READMEs individuais registram:
@@ -310,11 +300,11 @@ Os READMEs individuais registram:
 
 ## 🔬 Estado atual
 
-O **Orderer Hyperledger Fabric 2.5** já foi inicializado com sucesso dentro de uma topologia Fogbed utilizando **TLS e consenso Raft**.
+O **Hyperledger Fabric 2.5** foi integrado ao **Fogbed** com sucesso até a validação do registro do runtime do chaincode no **Lab07**.
 
-O trabalho atual está concentrado na inicialização e validação do **Peer** e na investigação da comunicação entre **Peer e Orderer**.
+Foram validados: a comunicação Peer ↔ Orderer via gRPC/TLS, o bootstrap por canal de aplicação via `osnadmin`, a entrega de blocos (delivery), o empacotamento, instalação, aprovação e commit de definições de chaincode, e a resolução dinâmica do endpoint do Peer (`CORE_PEER_CHAINCODEADDRESS`) para a conexão e registro estável do container de runtime do chaincode (`experiment03b`).
 
-Somente após essa etapa estar estável serão introduzidos os mecanismos de **Certificate Authority, canais e chaincodes**.
+O trabalho atual está concentrado na validação de transações de negócio (`invoke` e `query`) no **Experiment 04** do Lab07, como etapa final antes da criação da abstração/plugin da integração.
 
 ---
 

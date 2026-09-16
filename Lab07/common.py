@@ -21,6 +21,7 @@ FABRIC_VERSION = '2.5.16'
 DOCKER_SOCKET = Path('/var/run/docker.sock')
 PACKAGE_DIR = ROOT_DIR / 'chaincode-packages'
 CONTAINER_PACKAGES = '/lab07/chaincode-packages'
+ORDERER_CLI_CA = '/lab07/orderer-tls/ca.crt'
 CHAINCODES = {
     'basic': {'name': 'basic', 'path': ROOT_DIR / 'chaincodes/basic',
               'language': 'golang', 'label': 'basic_1.0'},
@@ -34,6 +35,7 @@ infra = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(infra)
 infra.ROOT_DIR = str(ROOT_DIR)
 infra.CHANNEL_BLOCK = str(ROOT_DIR / 'channel-artifacts' / f'{infra.CHANNEL_ID}.block')
+DEFINITION_DEFAULTS = {'channel': infra.CHANNEL_ID, 'version': '1.0', 'sequence': 1}
 # LAB05_COMMON no módulo carregado aponta ao arquivo original, somente para leitura.
 # Seus construtores continuam servindo de base para as adaptações locais do Lab06.
 
@@ -118,10 +120,12 @@ def check_prerequisites(env, chaincode):
         run_command(['docker', 'image', 'inspect', f'hyperledger/fabric-{image}:{FABRIC_VERSION}'], env=env)
 
 
-def create_network():
+def create_network(orderer_cli=False):
     """Prepara artefatos Lab07 e retorna (exp, orderer, peer), ainda sem start.
 
-    Reutiliza construtores/geração validados. Acrescenta somente socket Docker e
+    orderer_cli=True monta a CA do Orderer em leitura no Peer para approveformyorg.
+    O padrão preserva o Experiment 01. Reutiliza construtores/geração validados.
+    Acrescenta socket Docker e
     volume de pacotes ao Peer para o builder/install. Não cria nós extras.
     """
     from fogbed import FogbedExperiment
@@ -135,16 +139,124 @@ def create_network():
     orderer.dimage = f'hyperledger/fabric-orderer:{FABRIC_VERSION}'
     peer.dimage = f'hyperledger/fabric-peer:{FABRIC_VERSION}'
     peer.volumes += [f'{DOCKER_SOCKET}:{DOCKER_SOCKET}', f'{PACKAGE_DIR}:{CONTAINER_PACKAGES}:ro']
+    if orderer_cli:
+        tls_dir = next(v.split(':', 1)[0] for v in orderer.volumes
+                       if v.split(':', 1)[1] == '/etc/hyperledger/fabric/tls')
+        peer.volumes.append(f'{Path(tls_dir) / "ca.crt"}:{ORDERER_CLI_CA}:ro')
     peer.environment.update({
         'CORE_VM_ENDPOINT': f'unix://{DOCKER_SOCKET}',
         'CORE_CHAINCODE_BUILDER': f'hyperledger/fabric-ccenv:{FABRIC_VERSION}',
         'CORE_CHAINCODE_GOLANG_RUNTIME': f'hyperledger/fabric-baseos:{FABRIC_VERSION}',
         'CORE_CHAINCODE_INSTALLTIMEOUT': '300s',
     })
+    # O topology_ip (10.0.0.20) é mantido nos metadados do Fogbed.
+    # O chaincode_endpoint é descoberto dinamicamente na inicialização do container a partir da interface eth0
+    # (onde o Docker atribui o IP operacional), garantindo que o Peer anuncie um endpoint
+    # efetivamente alcançável ao runtime do chaincode (NetworkMode=host).
+    peer.dcmd = (
+        'sh -c \'export CORE_PEER_CHAINCODEADDRESS="$(ip -4 addr show dev eth0 | '
+        'grep -oP "(?<=inet\\s)\\d+(\\.\\d+){3}" || hostname -i | awk "{print \\$1}"):7052"; '
+        'exec peer node start\''
+    )
     exp.add_docker(orderer, cloud)
     exp.add_docker(peer, fog)
     exp.add_link(cloud, fog)
     return exp, orderer, peer
+
+
+def check_chaincode_endpoint_reachability(peer, port=7052, retries=10, delay=0.5):
+    """Valida a alcançabilidade do endpoint :7052 a partir do contexto do host (runtime host mode).
+
+    Reutiliza a descoberta de IP real do container Peer (infra.get_container_real_ip)
+    e testa a porta TCP 7052 a partir do namespace do HOST.
+    """
+    import socket
+    import time
+    peer_ip = infra.get_container_real_ip(peer)
+    if not peer_ip:
+        return False, 'IP do Peer não encontrado'
+    endpoint = f'{peer_ip}:{port}'
+    for attempt in range(1, retries + 1):
+        try:
+            with socket.create_connection((peer_ip, port), timeout=2.0):
+                return True, f'OK TCP {endpoint} alcançável do host ({attempt} tentativa(s))'
+        except Exception as err:
+            if attempt < retries:
+                time.sleep(delay)
+            else:
+                return False, f'Falha ao conectar em {endpoint} a partir do host: {err}'
+    return False, f'Timeout em {endpoint}'
+
+
+def validate_chaincode_runtime_registration(peer, chaincode_name='basic', timeout=30):
+    """Observa o container de runtime do chaincode e valida o registro no Peer.
+
+    Verifica se o container dev-peer0... foi criado e permanece ativo, e se os logs
+    do Peer confirmam o registro sem mensagens de erro/timeout.
+    """
+    import time
+    start_time = time.time()
+    container_found = False
+    cc_container_name = None
+
+    while time.time() - start_time < timeout:
+        try:
+            out = subprocess.check_output(['docker', 'ps', '--format', '{{.Names}}'], text=True).strip()
+            for line in out.splitlines():
+                if chaincode_name in line and 'dev-peer0' in line:
+                    container_found = True
+                    cc_container_name = line.strip()
+                    break
+        except Exception:
+            pass
+        if container_found:
+            break
+        time.sleep(1.0)
+
+    if not container_found:
+        return False, f'Container de runtime do chaincode {chaincode_name} não foi criado dentro de {timeout}s'
+
+    # Aguarda uma janela curta para garantir estabilidade (não apenas ms)
+    time.sleep(3.0)
+
+    try:
+        out = subprocess.check_output(['docker', 'ps', '--format', '{{.Names}}'], text=True).strip()
+        if cc_container_name not in out.splitlines():
+            try:
+                err_logs = subprocess.check_output(['docker', 'logs', '--tail', '30', cc_container_name],
+                                                 stderr=subprocess.STDOUT, text=True).strip()
+            except Exception:
+                err_logs = 'logs indisponíveis'
+            return False, f'Runtime {cc_container_name} encerrou prematuramente. Logs:\n{err_logs}'
+    except Exception as ex:
+        return False, f'Erro ao verificar status do container runtime: {ex}'
+
+    peer_logs = ''
+    try:
+        candidate_names = [peer.name, f'mn.{peer.name}', f'{peer.name}.fogbed']
+        for c_name in candidate_names:
+            try:
+                peer_logs = subprocess.check_output(['docker', 'logs', '--tail', '100', c_name],
+                                                    stderr=subprocess.STDOUT, text=True).strip()
+                if peer_logs:
+                    break
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    negative_keywords = [
+        'chaincode registration failed',
+        'container exited with 2',
+        'Error starting asset-transfer-basic chaincode',
+        'i/o timeout'
+    ]
+    found_negatives = [kw for kw in negative_keywords if kw in peer_logs]
+    if found_negatives:
+        return False, f'Erros de registro detectados nos logs do Peer: {", ".join(found_negatives)}'
+
+    evidence = f'Container {cc_container_name} ativo e estável. Registro no Peer confirmado sem erros.'
+    return True, evidence
 
 
 def require_check(label, result):
@@ -189,13 +301,16 @@ def validate_network(orderer, peer):
 def peer_lifecycle(peer, peer_ip, arguments, timeout=60):
     """Executa lifecycle no Peer via Docker exec sem TTY e retorna CompletedProcess.
 
-    arguments contém somente install ou queryinstalled e seus argumentos. Usa ID
+    arguments contém uma operação de lifecycle até querycommitted e seus argumentos. Usa ID
     Docker guardado pelo Fogbed; não redescobre nomes de containers. O ambiente CLI
     deriva do nó e substitui somente MSP administrativo/endereço/hostname TLS.
     Exit code e streams separados evitam novo parser de marcadores de terminal.
     """
-    if not arguments or arguments[0] not in ('install', 'queryinstalled'):
-        raise ValueError('Somente install e queryinstalled são permitidos nesta etapa')
+    if not arguments or arguments[0] not in (
+        'install', 'queryinstalled', 'approveformyorg',
+        'checkcommitreadiness', 'commit', 'querycommitted',
+    ):
+        raise ValueError('Operação fora do escopo do lifecycle implementado')
     docker = getattr(getattr(peer, '_service', None), 'docker', None)
     container_id = getattr(docker, 'did', None)
     if not container_id:
@@ -284,3 +399,146 @@ def identify_installed_package(package, installed):
     if len(matches) != 1:
         raise RuntimeError(f'Package ID esperado não identificado univocamente: {package["package_id"]}')
     return matches[0]['package_id']
+
+
+def approve_chaincode_for_org(peer, peer_ip, orderer, definition, package_id):
+    """Aprova uma definição pela organização do Admin MSP usado pelo CLI.
+
+    peer/peer_ip identificam o Peer ativo e seu IP descoberto; orderer fornece
+    hostname TLS/porta. definition contém channel, name, version e sequence;
+    package_id deve vir de queryinstalled nesta sessão, identificado pelo helper.
+    Retorna CompletedProcess com exit code 0 e streams preservados; falhas propagam
+    RuntimeError. Envia transação ao Ordering Service e aguarda seu evento válido.
+    Não executa checkcommitreadiness nem commit da definição no canal.
+    """
+    definition_args = _definition_arguments(definition)
+    if not isinstance(package_id, str) or not package_id.strip():
+        raise ValueError('Package ID da instalação não identificado')
+    arguments = ['approveformyorg', *definition_args, '--package-id', package_id,
+                 *_orderer_arguments(peer, orderer),
+                 '--waitForEvent', '--waitForEventTimeout', '60s']
+    return peer_lifecycle(peer, peer_ip, arguments, timeout=90)
+
+
+def _definition_arguments(definition):
+    """Valida channel/name/version/sequence e retorna flags comuns, sem efeitos.
+
+    A mesma definição explícita alimenta aprovação, readiness e commit, evitando
+    defaults divergentes entre operações. Entradas inválidas levantam ValueError.
+    """
+    for key in ('channel', 'name', 'version'):
+        if not isinstance(definition.get(key), str) or not definition[key].strip():
+            raise ValueError(f'Definição exige {key} textual não vazio')
+    sequence = definition.get('sequence')
+    if type(sequence) is not int or sequence < 1:
+        raise ValueError('sequence deve ser inteiro positivo')
+    return ['--channelID', definition['channel'], '--name', definition['name'],
+            '--version', definition['version'], '--sequence', str(sequence)]
+
+
+def _orderer_arguments(peer, orderer):
+    """Deriva flags gRPC/TLS dos nós existentes para aprovação e commit.
+
+    Recebe os containers, verifica a montagem da CA e retorna argv sem modificar
+    rede ou certificados. O hostname continua usando o mapeamento já validado.
+    """
+    if not any(v.endswith(f':{ORDERER_CLI_CA}:ro') for v in peer.volumes):
+        raise ValueError('CA do Orderer não montada: prepare a rede com orderer_cli=True')
+
+    # A mesma identidade TLS usada pelo Lab06 resolve no hosts do Peer. O CLI
+    # roda nesse container; não usa IP fixo ou um mapeamento temporário paralelo.
+    tls_dir = next(v.split(':', 1)[0] for v in orderer.volumes
+                   if v.split(':', 1)[1] == '/etc/hyperledger/fabric/tls')
+    hostname = Path(tls_dir).parent.name
+    port = orderer.environment['ORDERER_GENERAL_LISTENPORT']
+    return ['-o', f'{hostname}:{port}', '--tls', '--cafile', ORDERER_CLI_CA,
+            '--ordererTLSHostnameOverride', hostname]
+
+
+def check_commit_readiness(peer, peer_ip, definition):
+    """Consulta aprovações da definição e exige aprovação da organização do Peer.
+
+    Recebe nó/IP descoberto e a definição usada em approveformyorg. Usa Admin MSP
+    via peer_lifecycle; não envia transação. Retorna (aprovações, CompletedProcess),
+    preservando streams/exit. JSON inválido ou aprovação diferente de bool true
+    levanta RuntimeError antes de permitir commit nesta topologia de uma org.
+    """
+    result = peer_lifecycle(peer, peer_ip, [
+        'checkcommitreadiness', *_definition_arguments(definition), '--output', 'json'])
+    try:
+        data = json.loads(result.stdout)
+        # O exemplo da documentação 2.5 usa Approvals; o protobuf usa approvals.
+        approvals = data['approvals'] if 'approvals' in data else data['Approvals']
+        if not isinstance(approvals, dict) or any(type(v) is not bool for v in approvals.values()):
+            raise ValueError('Mapa de aprovações inválido')
+        msp = peer.environment['CORE_PEER_LOCALMSPID']
+        if approvals.get(msp) is not True:
+            raise ValueError(f'{msp} não aprovou a definição; commit interrompido')
+    except (ValueError, KeyError, TypeError) as error:
+        raise RuntimeError(f'checkcommitreadiness: {error}\nexit code: {result.returncode}'
+                           f'\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}') from error
+    return approvals, result
+
+
+def commit_chaincode_definition(peer, peer_ip, orderer, definition):
+    """Registra a definição aprovada no canal e aguarda seu evento de commit.
+
+    Recebe a mesma definição de readiness e os nós/IP existentes. Endpoint, CA e
+    MSP do Peer vêm do ambiente CLI; Orderer usa as flags TLS compartilhadas com
+    approveformyorg. Envia uma transação, sem retry. Retorna CompletedProcess após
+    exit 0 com --waitForEvent; status explicitamente não VALID provoca erro mesmo
+    com exit 0. Streams permanecem separados e disponíveis como evidência.
+    """
+    result = peer_lifecycle(peer, peer_ip, [
+        'commit', *_definition_arguments(definition), *_orderer_arguments(peer, orderer),
+        '--waitForEvent', '--waitForEventTimeout', '60s'], timeout=90)
+    # Exit 0 com espera habilitada é o contrato do CLI. Os logs acrescentam
+    # evidência, sem exigir prefixos/timestamps ou comparar o output inteiro.
+    statuses = re.findall(r'committed\s+with\s+status\s*\(\s*([A-Z_]+)\s*\)',
+                          result.stdout + '\n' + result.stderr)
+    if any(status != 'VALID' for status in statuses):
+        raise RuntimeError(f'commit: transação inválida {statuses}\nexit code: {result.returncode}'
+                           f'\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}')
+    return result
+
+
+def query_committed_chaincode(peer, peer_ip, definition):
+    """Consulta e compara name/version/sequence com a definição esperada no canal.
+
+    Recebe nó/IP e a mesma definição do commit; retorna (registro, CompletedProcess).
+    Consulta todas as definições em JSON para obter também name (a consulta por
+    --name omite esse campo). É somente leitura; ausência, duplicidade, resposta
+    inválida ou divergência levantam RuntimeError com os streams originais.
+    """
+    _definition_arguments(definition)
+    result = peer_lifecycle(peer, peer_ip, [
+        'querycommitted', '--channelID', definition['channel'], '--output', 'json'])
+    try:
+        entries = json.loads(result.stdout)['chaincode_definitions']
+        if not isinstance(entries, list) or any(not isinstance(e, dict) for e in entries):
+            raise ValueError('Lista de definições inválida')
+        matches = [entry for entry in entries if entry.get('name') == definition['name']]
+        if len(matches) != 1:
+            raise ValueError(f'Definição {definition["name"]} ausente ou duplicada')
+        found = matches[0]
+        for key in ('name', 'version', 'sequence'):
+            if type(found.get(key)) is not type(definition[key]) or found[key] != definition[key]:
+                raise ValueError(f'{key}: esperado {definition[key]!r}, recebido {found.get(key)!r}')
+    except (ValueError, KeyError, TypeError) as error:
+        raise RuntimeError(f'querycommitted: {error}\nexit code: {result.returncode}'
+                           f'\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}') from error
+    return found, result
+
+
+def show_command(label, result):
+    """Apresenta exit code/stdout/stderr de um comando já checado por run_command.
+
+    label identifica a etapa; result é CompletedProcess bem-sucedido. Retorna None;
+    escreve apenas no terminal. Não infere sucesso comparando frases de logs.
+    """
+    print(infra.format_diagnostic_line(label, True))
+    print(f'  exit code: {result.returncode}')
+    if result.stdout.strip():
+        print(result.stdout.strip())
+    if result.stderr.strip():
+        print(result.stderr.strip())

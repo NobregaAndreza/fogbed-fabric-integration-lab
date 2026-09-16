@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Rede mínima e package/install/queryinstalled; nenhuma aprovação ou commit."""
+"""Sessão independente até approveformyorg para Org1; sem commit da definição."""
 import argparse
 
 from common import (
     CHAINCODES, PACKAGE_DIR, infra, select_chaincode, fabric_environment,
     check_prerequisites, create_network, validate_network, package_chaincode,
     install_chaincode, query_installed_chaincodes, identify_installed_package, show_command,
+    DEFINITION_DEFAULTS, approve_chaincode_for_org,
 )
 
 
 def main():
-    """Orquestra uma sessão independente e retorna 0 somente após ID confirmado.
+    """Orquestra uma sessão independente e retorna 0 somente após aprovação bem-sucedida.
 
     Mantém a rede para inspeção até ENTER mesmo em falha de lifecycle. O finally
     encerra a rede, preservando crypto/bloco/pacote. Falhas de pré-requisitos não
@@ -26,9 +27,9 @@ def main():
         chaincode = select_chaincode(args.chaincode)
         env = fabric_environment()
         check_prerequisites(env, chaincode)
-        exp, orderer, peer = create_network()
+        exp, orderer, peer = create_network(orderer_cli=True)
         exp.start()
-        infra.banner('LAB07: PACKAGE / INSTALL / QUERYINSTALLED')
+        infra.banner('LAB07: APROVAÇÃO DA DEFINIÇÃO POR ORG1')
         peer_ip = validate_network(orderer, peer)
         print(infra.format_diagnostic_line('Chaincode selecionado', True))
         print(f"  {chaincode['name']} | {chaincode['language']} | {chaincode['label']} | {chaincode['path']}")
@@ -43,9 +44,15 @@ def main():
         package_id = identify_installed_package(package, installed)
         print(infra.format_diagnostic_line('Package ID identificado', True))
         print(f'  {package_id}')
+
+        # A revisão da definição é independente do label/hash do pacote instalado.
+        definition = {**DEFINITION_DEFAULTS, 'name': chaincode['name']}
+        print(f'  Definição: {definition}')
+        show_command('approveformyorg', approve_chaincode_for_org(
+            peer, peer_ip, orderer, definition, package_id))
         success = True
     except Exception as error:
-        print(infra.format_diagnostic_line('Experimento 01', False))
+        print(infra.format_diagnostic_line('Experimento 02', False))
         print(f'  {error}')
     finally:
         if exp is not None:

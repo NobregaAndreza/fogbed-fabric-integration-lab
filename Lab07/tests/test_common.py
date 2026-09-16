@@ -86,7 +86,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_future_operations_are_rejected(self):
         with self.assertRaises(ValueError):
-            common.peer_lifecycle(None, '192.0.2.2', ['commit'])
+            common.peer_lifecycle(None, '192.0.2.2', ['invoke'])
 
     def test_lifecycle_uses_non_tty_exec_and_admin_context(self):
         peer = types.SimpleNamespace(environment={
@@ -111,6 +111,107 @@ class LifecycleTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     common.install_chaincode(None, '', {'path':path,'label':'basic_1.0','package_id':'basic_1.0:old'})
                 execute.assert_not_called()
+
+
+class ApprovalTests(unittest.TestCase):
+    """Valida argumentos reais da aprovação sem enviar transações Fabric."""
+    def setUp(self):
+        self.peer = types.SimpleNamespace(volumes=['/local/ca.crt:' + common.ORDERER_CLI_CA + ':ro'])
+        self.orderer = types.SimpleNamespace(
+            volumes=['/crypto/orderers/orderer0.example.com/tls:/etc/hyperledger/fabric/tls'],
+            environment={'ORDERER_GENERAL_LISTENPORT':'7050'})
+        self.definition = {'channel':'mychannel','name':'assets','version':'1.0','sequence':1}
+
+    def test_approval_uses_supplied_id_definition_and_orderer_tls(self):
+        evidence = completed('accepted', 'event received')
+        with patch.object(common, 'peer_lifecycle', return_value=evidence) as execute:
+            result = common.approve_chaincode_for_org(
+                self.peer, '192.0.2.2', self.orderer, self.definition, 'assets_1.0:dynamic-hash')
+        args = execute.call_args.args[2]
+        self.assertEqual(args[0], 'approveformyorg')
+        for flag, value in [('--name','assets'),('--package-id','assets_1.0:dynamic-hash'),
+                            ('--sequence','1'),('--channelID','mychannel'),
+                            ('-o','orderer0.example.com:7050'),
+                            ('--cafile',common.ORDERER_CLI_CA),
+                            ('--ordererTLSHostnameOverride','orderer0.example.com')]:
+            self.assertEqual(args[args.index(flag)+1], value)
+        self.assertIn('--tls', args)
+        self.assertIn('--waitForEvent', args)
+        self.assertIs(result, evidence)
+        self.assertEqual(execute.call_count, 1)
+
+    def test_approval_rejects_missing_package_or_ca(self):
+        with patch.object(common, 'peer_lifecycle') as execute:
+            with self.assertRaises(ValueError):
+                common.approve_chaincode_for_org(self.peer, '', self.orderer, self.definition, '')
+            self.peer.volumes = []
+            with self.assertRaises(ValueError):
+                common.approve_chaincode_for_org(self.peer, '', self.orderer, self.definition, 'id')
+            execute.assert_not_called()
+
+    def test_approval_preserves_failure_without_retry(self):
+        with patch.object(common, 'peer_lifecycle', side_effect=RuntimeError('exit code: 1; TLS failure')) as execute:
+            with self.assertRaisesRegex(RuntimeError, 'TLS failure'):
+                common.approve_chaincode_for_org(self.peer, '', self.orderer, self.definition, 'id')
+            self.assertEqual(execute.call_count, 1)
+
+
+class CommitTests(ApprovalTests):
+    """Exercita critérios semânticos do incremento sem executar Fabric."""
+    def test_readiness_requires_boolean_approval(self):
+        self.peer.environment = {'CORE_PEER_LOCALMSPID': 'Org1MSP'}
+        for approvals in ({}, {'Org1MSP': False}, {'Org1MSP': 'true'}, {'Org1MSP': 1}):
+            with self.subTest(approvals=approvals), patch.object(
+                    common, 'peer_lifecycle', return_value=completed(json.dumps({'approvals': approvals}))):
+                with self.assertRaises(RuntimeError):
+                    common.check_commit_readiness(self.peer, '', self.definition)
+        for field in ('approvals', 'Approvals'):
+            response = completed(json.dumps({field: {'Org1MSP': True}}), 'INFO')
+            with patch.object(common, 'peer_lifecycle', return_value=response):
+                approvals, evidence = common.check_commit_readiness(self.peer, '', self.definition)
+            self.assertIs(approvals['Org1MSP'], True)
+            self.assertEqual(evidence.stderr, 'INFO')
+
+    def test_commit_waits_and_rejects_invalid_event_even_exit_zero(self):
+        for stream in ('stdout', 'stderr'):
+            response = completed(**{stream: 'txid [abc] committed with status (MVCC_READ_CONFLICT)'})
+            with patch.object(common, 'peer_lifecycle', return_value=response) as execute:
+                with self.assertRaisesRegex(RuntimeError, 'transação inválida'):
+                    common.commit_chaincode_definition(self.peer, '', self.orderer, self.definition)
+                self.assertEqual(execute.call_count, 1)
+        response = completed(stderr='txid [abc] committed with status (VALID)')
+        with patch.object(common, 'peer_lifecycle', return_value=response) as execute:
+            self.assertIs(common.commit_chaincode_definition(
+                self.peer, '', self.orderer, self.definition), response)
+        args = execute.call_args.args[2]
+        self.assertIn('--waitForEvent', args)
+        self.assertIn('orderer0.example.com:7050', args)
+        self.assertNotIn('--package-id', args)
+        self.assertEqual(args[args.index('--name') + 1], 'assets')
+
+    def test_querycommitted_checks_full_definition(self):
+        found = {k: self.definition[k] for k in ('name', 'version', 'sequence')}
+        invalid = [[], [dict(found, version='2.0')], [dict(found, sequence=2)],
+                   [dict(found, name='other')], [dict(found, sequence=True)], [found, found]]
+        for entries in invalid:
+            with self.subTest(entries=entries), patch.object(common, 'peer_lifecycle', return_value=
+                    completed(json.dumps({'chaincode_definitions': entries}))):
+                with self.assertRaises(RuntimeError):
+                    common.query_committed_chaincode(self.peer, '', self.definition)
+        response = completed(json.dumps({'chaincode_definitions': [found]}), 'INFO')
+        with patch.object(common, 'peer_lifecycle', return_value=response):
+            actual, evidence = common.query_committed_chaincode(self.peer, '', self.definition)
+        self.assertEqual(actual, found)
+        self.assertIs(evidence, response)
+
+    def test_queries_reject_malformed_json(self):
+        self.peer.environment = {'CORE_PEER_LOCALMSPID': 'Org1MSP'}
+        for body in ('not JSON', '{}', 'null', '[]'):
+            for query in (common.check_commit_readiness, common.query_committed_chaincode):
+                with self.subTest(body=body, query=query.__name__), patch.object(
+                        common, 'peer_lifecycle', return_value=completed(body, 'diagnostic')):
+                    with self.assertRaisesRegex(RuntimeError, 'diagnostic'):
+                        query(self.peer, '', self.definition)
 
 
 if __name__ == '__main__':
